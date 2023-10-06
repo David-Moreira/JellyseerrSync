@@ -14,7 +14,7 @@ Set up the webhook notification to listen to the Notification "On Movie File Del
 
 ### Sonarr
 
-Set up the webhook notification to listen to the Notification "**On Series Delet**e", "**On Episode File Delet**e" on **http://ip_or_name/sonarr/notification**
+Set up the webhook notification to listen to the Notification "**On Series Delete**", "**On Episode File Delete**" on **http://ip_or_url/sonarr/notification**
 
 It is of note that upon an episode being deleted, the entire series just gets cleared currently. As there seems to be no way to determine if there are episodes still left or not. Jellyseerr recurring Sonarr Scan
 job should refresh any entry that might have been cleared, but it's still actually available.
