@@ -16,6 +16,9 @@ Set up the webhook notification to listen to the Notification "On Movie File Del
 
 Set up the webhook notification to listen to the Notification "On Series Delete", "On Episode File Delete" on http://ip_or_name/sonarr/notification
 
+It is of note that upon an episode being deleted, the entire series just gets cleared currently. As there seems to be no way to determine if there are episodes still left or not. Jellyseerr recurring Sonarr Scan
+job should refresh any entry that might have been cleared, but it's still actually available.
+
 ## Sync
 By visiting http://ip_or_url/syncdeleted/movies the app will query Jellyseerr for every movie, and verify whether an item exists in the Jellyfin database. If it does not, it clears the entry on Jellyseerr.
 
