@@ -167,7 +167,7 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
 
         var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
 
-        var notFoundMessage = "Jellyfin movies not found: " + notFoundMovies.Count();
+        var notFoundMessage = "Jellyfin movies/items that do not exist: " + notFoundMovies.Count();
         log.AppendLine( notFoundMessage );
         Console.WriteLine( notFoundMessage );
 
