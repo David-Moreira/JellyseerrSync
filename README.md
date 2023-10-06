@@ -2,6 +2,7 @@
 
 ## The Problem
 If media gets deleted from jellyfin, jellyseerr does not get updated and so media still shows as Available. See https://github.com/Fallenbagel/jellyseerr/issues/84
+
 This app provides kinda of an hacky way to keep jellyseerr synced, while jellyseerr does not provide a fix.
 
 ## Notifications
