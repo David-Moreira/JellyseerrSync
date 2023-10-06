@@ -10,7 +10,7 @@ Clean up the availability on Jellyseerr by using the Radarr and Sonarr Webhook t
 
 ### Radarr
 
-Set up the webhook notification to listen to the Notification "On Movie File Delete" on **http://ip_or_url/radarr/notification**
+Set up the webhook notification to listen to the Notification "**On Movie File Delete**" on **http://ip_or_url/radarr/notification**
 
 ### Sonarr
 
