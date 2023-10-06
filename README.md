@@ -6,15 +6,15 @@ If media gets deleted from jellyfin, jellyseerr does not get updated and so medi
 This app provides kinda of an hacky way to keep jellyseerr synced, while jellyseerr does not provide a fix.
 
 ## Notifications
-Clean up the availability on Jellyseerr by using the Radarr and Sonarr Webhook to listen to the MovieFileDelete and EpisodeFileDelete events.
+Clean up the availability on Jellyseerr by using the Radarr and Sonarr Webhook to listen to the **MovieFileDelete** and **EpisodeFileDelete** events.
 
 ### Radarr
 
-Set up the webhook notification to listen to the Notification "On Movie File Delete" on http://ip_or_url/radarr/notification
+Set up the webhook notification to listen to the Notification "On Movie File Delete" on **http://ip_or_url/radarr/notification**
 
 ### Sonarr
 
-Set up the webhook notification to listen to the Notification "On Series Delete", "On Episode File Delete" on http://ip_or_name/sonarr/notification
+Set up the webhook notification to listen to the Notification "**On Series Delet**e", "**On Episode File Delet**e" on **http://ip_or_name/sonarr/notification**
 
 It is of note that upon an episode being deleted, the entire series just gets cleared currently. As there seems to be no way to determine if there are episodes still left or not. Jellyseerr recurring Sonarr Scan
 job should refresh any entry that might have been cleared, but it's still actually available.
