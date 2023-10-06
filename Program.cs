@@ -35,8 +35,6 @@ builder.Services.AddHttpClient( "Jellyfin", ( client ) =>
 
 var app = builder.Build();
 
-app.UseHttpsRedirection();
-
 app.MapGet( "/", async ( context ) => await context.Response.WriteAsync( @"
 Endpoints:
 /radarr/notification
