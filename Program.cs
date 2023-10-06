@@ -167,9 +167,9 @@ public class SonarrNotificationPayload
 
     public SonarrSeries Series { get; set; }
 
-    public List<SonarrEpisode> Episodes { get; set; }
+    //public List<SonarrEpisode> Episodes { get; set; }
 
-    public SonarrEpisodeFile EpisodeFile { get; set; }
+    //public SonarrEpisodeFile EpisodeFile { get; set; }
 
     public string DeleteReason { get; set; }
 }
