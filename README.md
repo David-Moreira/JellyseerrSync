@@ -39,8 +39,8 @@ services:
     environment:
       - JELLYSEERR_APIKEY=MYAPIKEY
       - JELLYFIN_APIKEY=MYAPIKEY
-      - JELLYSEERR_HOST_URL=http://192.168.1.10:8096/
-      - JELLYFIN_HOST_URL=http://192.168.1.11:5055/
+      - JELLYSEERR_HOST_URL=http://192.168.1.11:5055/
+      - JELLYFIN_HOST_URL=http://192.168.1.10:8096/
     ports:
       - 50580:80
     restart: unless-stopped
