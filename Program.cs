@@ -13,7 +13,7 @@ var builder = WebApplication.CreateBuilder( args );
 
 builder.Services.AddHttpClient( "Jellyseerr", ( client ) =>
 {
-    client.BaseAddress = new Uri( $"{JELLYSEERR_HOST_URL}/api/v1/" );
+    client.BaseAddress = new Uri( $"{JELLYSEERR_HOST_URL}api/v1/" );
     client.DefaultRequestHeaders.Add( "X-Api-Key", JELLYSEERR_APIKEY );
 } );
 
@@ -34,7 +34,8 @@ app.MapGet( "/", async ( context ) => await context.Response.WriteAsync( @"Hello
 Endpoints:
 /radarr/notification
 /sonarr/notification
-" ) );
+
+It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left." ) );
 
 app.MapGet( "/sync", async ( [FromServices] IHttpClientFactory httpClientFactory ) =>
 {
@@ -64,7 +65,7 @@ app.MapGet( "/sync", async ( [FromServices] IHttpClientFactory httpClientFactory
     var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join(",", moviesIds.Select(x=> x.Id))}&enableTotalRecordCount=false&enableImages=false" );
 
     var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse(y.Id) == Guid.Parse(x.Id) ) );
-    var links = notFoundMovies.Select( x => $"{JELLYSEERR_HOST_URL}/movie/{x.TmdbId}" );
+    var links = notFoundMovies.Select( x => $"{JELLYSEERR_HOST_URL}movie/{x.TmdbId}" );
 
     Console.WriteLine( "Not Found Movies To Sync: " + notFoundMovies.Count() );
 
@@ -107,12 +108,40 @@ app.MapPost( "/sonarr/notification", async ( [FromServices] IHttpClientFactory h
         Console.WriteLine( "Processing SeriesDelete" );
         var client = httpClientFactory.CreateClient( "Jellyseerr" );
 
+        Console.WriteLine( $"Searching for... {payload.Series.Title}" );
+        var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
+
+        if (searchResult is not null && searchResult.Results?.Count > 0)
+        {
+            var foundMedia = searchResult.Results.FirstOrDefault( x => x.MediaInfo?.TvdbId == payload.Series.TvdbId );
+            if (foundMedia is not null)
+            {
+                Console.WriteLine( $"Found existing media for {foundMedia.MediaInfo.TmdbId}" );
+                await client.DeleteAsync( $"media/{foundMedia.MediaInfo.Id}" );
+            }
+
+        }
     };
 
     if (payload.EventType.Equals( "EpisodeFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ))
     {
         Console.WriteLine( "Processing EpisodeFileDelete" );
+        
         var client = httpClientFactory.CreateClient( "Jellyseerr" );
+
+        Console.WriteLine( $"Searching for... {payload.Series.Title}" );
+        var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
+
+        if (searchResult is not null && searchResult.Results?.Count >0)
+        {
+            var foundMedia = searchResult.Results.FirstOrDefault( x => x.MediaInfo?.TvdbId == payload.Series.TvdbId );
+            if (foundMedia is not null)
+            {
+                Console.WriteLine( $"Found existing media for {foundMedia.MediaInfo.TmdbId}" );
+                await client.DeleteAsync( $"media/{foundMedia.MediaInfo.Id}" );
+            }
+
+        }
 
     };
 } );
@@ -142,12 +171,15 @@ public class JellySeerrTv
 {
     public int Id { get; set; }
 
+    public JellyseerrMedia MediaInfo { get; set; }
 }
 
 public class JellyseerrMedia
 {
     public int Id { get; set; }
     public int TmdbId { get; set; }
+
+    public int TvdbId { get; set; }
     public string MediaType { get; set; }
 
     public string JellyfinMediaId { get; set; }
@@ -155,6 +187,18 @@ public class JellyseerrMedia
     public string JellyfinMediaId4k { get; set; }
 
 }
+
+public class JellyseerrSearchResult
+{
+    public List<JellyseerrSearchMediaResult> Results { get; set; }
+}
+
+public class JellyseerrSearchMediaResult
+{
+    public int Id { get; set; }
+    public JellyseerrMedia MediaInfo { get; set; }
+}
+
 public class JellyseerrMediaSearchResult
 {
     public List<JellyseerrMedia> Results { get; set; }
