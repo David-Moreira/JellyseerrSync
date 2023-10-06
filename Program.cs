@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
+using System.Text;
+
 var builder = WebApplication.CreateBuilder( args );
 
 var configuration = new ConfigurationBuilder()
@@ -117,52 +119,66 @@ async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, Sona
     };
 }
 
-async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory, HttpContext contex )
+async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory, HttpContext context )
 {
-    await contex.Response.WriteAsync( "Processing Deleted Movies Sync...\r\n" );
     Console.WriteLine( "Processing Deleted Movies Sync..." );
+    var log = new StringBuilder();
 
-    var jellyfinClient = httpClientFactory.CreateClient( "Jellyfin" );
-    var jellyseerrClient = httpClientFactory.CreateClient( "Jellyseerr" );
-
-    var searchResult = await jellyseerrClient.GetFromJsonAsync<JellyseerrMediaSearchResult>( $"media?take=999&skip=0&filter=available&sort=added" );
-    var availableMovies = searchResult.Results.Where( x => x.MediaType.Equals( "movie", StringComparison.InvariantCultureIgnoreCase ) );
-
-
-    var moviesIds = availableMovies
-        .Where( x => !string.IsNullOrWhiteSpace( x.JellyfinMediaId ) || !string.IsNullOrWhiteSpace( x.JellyfinMediaId4k ) )
-        .Select( x => new
-        {
-            Id = string.IsNullOrWhiteSpace( x.JellyfinMediaId )
-        ? Guid.Parse( x.JellyfinMediaId4k ).ToString( "d" )
-        : Guid.Parse( x.JellyfinMediaId ).ToString( "d" ),
-            MediaId = x.Id,
-            TmdbId = x.TmdbId
-        } );
-
-    var totalMessage = "Total Jellyseerr Movies found as Available: " + moviesIds.Count();
-    await contex.Response.WriteAsync( $"{totalMessage}\r\n" );
-    Console.WriteLine( totalMessage );
-
-
-    var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", moviesIds.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
-
-    var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
-
-    var notFoundMessage = "Jellyfin movies not found: " + notFoundMovies.Count();
-    await contex.Response.WriteAsync( $"{notFoundMessage}\r\n" );
-    Console.WriteLine( notFoundMessage );
-
-    if (notFoundMovies.Count() > 0)
+    try
     {
-        foreach (var notFoundMovie in notFoundMovies)
+
+
+        log.AppendLine( "Processing Deleted Movies Sync..." );
+
+
+        var jellyfinClient = httpClientFactory.CreateClient( "Jellyfin" );
+        var jellyseerrClient = httpClientFactory.CreateClient( "Jellyseerr" );
+
+        var searchResult = await jellyseerrClient.GetFromJsonAsync<JellyseerrMediaSearchResult>( $"media?take=999&skip=0&filter=available&sort=added" );
+        var availableMovies = searchResult.Results.Where( x => x.MediaType.Equals( "movie", StringComparison.InvariantCultureIgnoreCase ) );
+
+
+        var moviesIds = availableMovies
+            .Where( x => !string.IsNullOrWhiteSpace( x.JellyfinMediaId ) || !string.IsNullOrWhiteSpace( x.JellyfinMediaId4k ) )
+            .Select( x => new
+            {
+                Id = string.IsNullOrWhiteSpace( x.JellyfinMediaId )
+            ? Guid.Parse( x.JellyfinMediaId4k ).ToString( "d" )
+            : Guid.Parse( x.JellyfinMediaId ).ToString( "d" ),
+                MediaId = x.Id,
+                TmdbId = x.TmdbId
+            } );
+
+        var totalMessage = "Total Jellyseerr Movies found as Available: " + moviesIds.Count();
+        log.AppendLine( totalMessage );
+        Console.WriteLine( totalMessage );
+
+
+        var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", moviesIds.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
+
+        var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
+
+        var notFoundMessage = "Jellyfin movies not found: " + notFoundMovies.Count();
+        log.AppendLine( notFoundMessage );
+        Console.WriteLine( notFoundMessage );
+
+        if (notFoundMovies.Count() > 0)
         {
-            var clearMessage = $"Clearing: {JELLYSEERR_HOST_URL}movie/{notFoundMovie.TmdbId}";
-            await contex.Response.WriteAsync( $"{clearMessage}\r\n" );
-            Console.WriteLine( clearMessage );
-            await jellyseerrClient.DeleteAsync( $"media/{notFoundMovie.MediaId}" );
+            foreach (var notFoundMovie in notFoundMovies)
+            {
+                var clearMessage = $"Clearing: {JELLYSEERR_HOST_URL}movie/{notFoundMovie.TmdbId}";
+                log.AppendLine( clearMessage );
+                Console.WriteLine( clearMessage );
+                await jellyseerrClient.DeleteAsync( $"media/{notFoundMovie.MediaId}" );
+            }
         }
     }
+    catch (Exception ex)
+    {
+        log.AppendLine( "An error has occurred: " );
+        log.AppendLine( ex.ToString() );
+    }
 
+    await context.Response.WriteAsync( log.ToString() );
 
 }
