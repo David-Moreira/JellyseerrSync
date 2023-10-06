@@ -47,6 +47,9 @@ It is of note that any series episode deletion assumes the entire series is dele
 app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context ) =>
 {
     var log = await SyncDeletedMovies( httpClientFactory );
+
+    context.Response.ContentType = "text/plain";
+    context.Response.ContentLength = log.Length;
     await context.Response.WriteAsync( log );
 } );
 
