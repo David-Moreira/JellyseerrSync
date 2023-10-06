@@ -42,8 +42,8 @@ Endpoints:
 
 It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left." ) );
 
-app.MapGet( "/syncdeleted/movies", ( [FromServices] IHttpClientFactory httpClientFactory )
-    => SyncDeletedMovies( httpClientFactory ) );
+app.MapGet( "/syncdeleted/movies", ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context )
+    => SyncDeletedMovies( httpClientFactory, context ) );
 
 app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] RadarrNotificationPayload payload )
     => ProcessRadarrNotification( httpClientFactory, payload ) );
@@ -55,7 +55,7 @@ app.MapPost( "/sonarr/notification", ( [FromServices] IHttpClientFactory httpCli
 app.Run();
 
 
-static async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactory, RadarrNotificationPayload payload )
+async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactory, RadarrNotificationPayload payload )
 {
     Console.WriteLine( "Processing Radarr Notification" );
     Console.WriteLine( System.Text.Json.JsonSerializer.Serialize( payload ) );
@@ -69,7 +69,7 @@ static async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactor
     };
 }
 
-static async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, SonarrNotificationPayload payload )
+async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, SonarrNotificationPayload payload )
 {
     Console.WriteLine( "Processing Sonarr Notification" );
     Console.WriteLine( System.Text.Json.JsonSerializer.Serialize( payload ) );
@@ -117,8 +117,9 @@ static async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactor
     };
 }
 
-static async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory )
+async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory, HttpContext contex )
 {
+    await contex.Response.WriteAsync( "Processing Deleted Movies Sync...\r\n" );
     Console.WriteLine( "Processing Deleted Movies Sync..." );
 
     var jellyfinClient = httpClientFactory.CreateClient( "Jellyfin" );
@@ -139,26 +140,29 @@ static async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory )
             TmdbId = x.TmdbId
         } );
 
-    Console.WriteLine( "Total Jellyseerr Movies found as Available: " + moviesIds.Count() );
+    var totalMessage = "Total Jellyseerr Movies found as Available: " + moviesIds.Count();
+    await contex.Response.WriteAsync( $"{totalMessage}\r\n" );
+    Console.WriteLine( totalMessage );
 
 
     var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", moviesIds.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
 
     var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
 
-    Console.WriteLine( "Jellyfin movies not found: " + notFoundMovies.Count() );
-
-    //var links = notFoundMovies.Select( x => $"{JELLYSEERR_HOST_URL}movie/{x.TmdbId}" );
-    //foreach (var link in links)
-    //{
-    //    Console.WriteLine( link );
-    //}
+    var notFoundMessage = "Jellyfin movies not found: " + notFoundMovies.Count();
+    await contex.Response.WriteAsync( $"{notFoundMessage}\r\n" );
+    Console.WriteLine( notFoundMessage );
 
     if (notFoundMovies.Count() > 0)
     {
         foreach (var notFoundMovie in notFoundMovies)
         {
+            var clearMessage = $"Clearing: {JELLYSEERR_HOST_URL}movie/{notFoundMovie.TmdbId}";
+            await contex.Response.WriteAsync( $"{clearMessage}\r\n" );
+            Console.WriteLine( clearMessage );
             await jellyseerrClient.DeleteAsync( $"media/{notFoundMovie.MediaId}" );
         }
     }
+
+
 }
