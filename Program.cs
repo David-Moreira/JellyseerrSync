@@ -44,8 +44,8 @@ Endpoints:
 
 It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left." ) );
 
-app.MapGet( "/syncdeleted/movies", ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context )
-    => SyncDeletedMovies( httpClientFactory, context ) );
+app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context )
+    => await SyncDeletedMovies( httpClientFactory, context ) );
 
 app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] RadarrNotificationPayload payload )
     => ProcessRadarrNotification( httpClientFactory, payload ) );
