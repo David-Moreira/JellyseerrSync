@@ -20,7 +20,8 @@ It is of note that upon an episode being deleted, the entire series just gets cl
 job should refresh any entry that might have been cleared, but it's still actually available.
 
 ## Sync
-By visiting **http://ip_or_url/syncdeleted/movies** the app will query Jellyseerr for every movie, and verify whether an item exists in the Jellyfin database. If it does not, it clears the entry on Jellyseerr.
+By visiting **http://ip_or_url/syncdeleted/movies** the app will query Jellyseerr for every movie that's marked as Available, and verify whether a corresponding item exists in the Jellyfin database. If it does not, it clears the movie entry on Jellyseerr. 
+A log is provided with every movie entry that was cleared.
 
 ## How to Deploy
 A docker image has been provided: 
