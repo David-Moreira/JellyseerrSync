@@ -44,8 +44,11 @@ Endpoints:
 
 It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left." ) );
 
-app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context )
-    => await SyncDeletedMovies( httpClientFactory, context ) );
+app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpContext context ) =>
+{
+    var log = await SyncDeletedMovies( httpClientFactory );
+    await context.Response.WriteAsync( log );
+} );
 
 app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] RadarrNotificationPayload payload )
     => ProcessRadarrNotification( httpClientFactory, payload ) );
@@ -119,11 +122,10 @@ async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, Sona
     };
 }
 
-async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory, HttpContext context )
+async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
 {
     Console.WriteLine( "Processing Deleted Movies Sync..." );
     var log = new StringBuilder();
-
     try
     {
 
@@ -178,7 +180,5 @@ async Task SyncDeletedMovies( IHttpClientFactory httpClientFactory, HttpContext 
         log.AppendLine( "An error has occurred: " );
         log.AppendLine( ex.ToString() );
     }
-
-    await context.Response.WriteAsync( log.ToString() );
-
+    return log.ToString();
 }
