@@ -40,14 +40,20 @@ Endpoints:
 /radarr/notification
 /sonarr/notification
 
-It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left." ) );
+It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left.
+
+/syncdeleted/movies
+
+This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all movies that are marked as Available in Jellyseerr.
+If a movie is not found in Jellyfin it will be cleared from Jellyseerr.
+" ) );
 
 app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpResponse response ) =>
 {
     var log = await SyncDeletedMovies( httpClientFactory );
 
     response.StatusCode = 200;
-    
+
     response.ContentType = "text/plain";
     response.ContentLength = null;
     response.Headers.Add( "Content-Encoding", "identity" );
@@ -62,7 +68,6 @@ app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpCli
 
 app.MapPost( "/sonarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] SonarrNotificationPayload payload )
     => ProcessSonarrNotification( httpClientFactory, payload ) );
-
 
 app.Run();
 
@@ -131,12 +136,13 @@ async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, Sona
 
 async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
 {
+    var batchSize = 100;
+
     Console.WriteLine( "Processing Deleted Movies Sync..." );
     var log = new StringBuilder();
+
     try
     {
-
-
         log.AppendLine( "Processing Deleted Movies Sync..." );
 
 
@@ -158,20 +164,28 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
                 TmdbId = x.TmdbId
             } );
 
-        var totalMessage = "Total Jellyseerr Movies found as Available: " + moviesIds.Count();
+
+        var jellyseerrMoviesCount = moviesIds.Count();
+        var totalMessage = $"Total Jellyseerr Movies found as Available: {jellyseerrMoviesCount}";
         log.AppendLine( totalMessage );
         Console.WriteLine( totalMessage );
 
+        var existingJellyfinItems = new List<JellyfinItem>();
+        for (int i = 0; i < jellyseerrMoviesCount; i += batchSize)
+        {
+            var batch = moviesIds.Skip( i ).Take( batchSize );
+            var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", batch.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
 
-        var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", moviesIds.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
+            existingJellyfinItems.AddRange( jellySearchResult.Items );
+        }
 
-        var notFoundMovies = moviesIds.Where( x => !jellySearchResult.Items.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
+        var notFoundMovies = moviesIds.Where( x => !existingJellyfinItems.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
 
         var notFoundMessage = "Jellyfin movies/items that do not exist: " + notFoundMovies.Count();
         log.AppendLine( notFoundMessage );
         Console.WriteLine( notFoundMessage );
 
-        if (notFoundMovies.Count() > 0)
+        if (notFoundMovies.Any())
         {
             foreach (var notFoundMovie in notFoundMovies)
             {
