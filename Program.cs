@@ -24,6 +24,11 @@ ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_APIKEY );
 var JELLYSEERR_URI = new Uri( JELLYSEERR_HOST_URL );
 var JELLYFIN_URI = new Uri( JELLYFIN_HOST_URL );
 
+builder.Services.AddLogging( loggingBuilder => {
+    var loggingSection = configuration.GetSection( "Logging" );
+    loggingBuilder.AddFile( loggingSection );
+} );
+
 builder.Services.AddHttpClient( "Jellyseerr", ( client ) =>
 {
     client.BaseAddress = new Uri( JELLYSEERR_URI, "api/v1/" );
