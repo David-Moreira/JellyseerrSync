@@ -39,21 +39,21 @@ builder.Services.AddHttpClient( "Jellyfin", ( client ) =>
 var app = builder.Build();
 
 app.MapGet( "/", async ( context ) => await context.Response.WriteAsync( @"
-Endpoints:
+Notification Endpoints:
 /radarr/notification
 /sonarr/notification
 
 It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left.
 
+Sync Endpoints:
 /syncdeleted/movies
 
-This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all movies that are marked as Available in Jellyseerr.
+This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all the movies that are marked as Available in Jellyseerr.
 If a movie is not found in Jellyfin it will be cleared from Jellyseerr.
 " ) );
 
 app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, [FromServices] ILogger<Program> logger, HttpResponse response ) =>
 {
-
     var log = await SyncDeletedMovies( httpClientFactory, logger );
 
     response.StatusCode = 200;
