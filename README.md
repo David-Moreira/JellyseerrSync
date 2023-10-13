@@ -23,6 +23,13 @@ job should refresh any entry that might have been cleared, but it's still actual
 By visiting **http://ip_or_url/syncdeleted/movies** the app will query Jellyseerr for every movie that's marked as Available, and verify whether a corresponding item exists in the Jellyfin database. If it does not, it clears the movie entry on Jellyseerr. 
 A log is provided with every movie entry that was cleared.
 
+## Logs
+Logs are provided on the root of the app if you use the default configuration, and can be accessed by visiting **http://ip_or_url/logs** or the file **JellyseerrSync.log**.
+You can choose not to log to file by 
+- Not providing the Logging variables
+- Setting the environment variable **Logging:File:Path** to an empty string or not providing it at all.
+- Setting the Logging:File:MinLevel to None
+
 ## How to Deploy
 A docker image has been provided: 
 https://hub.docker.com/r/dockerdaverick/jellyseerrsync
@@ -32,18 +39,24 @@ Example usage:
 Docker-compose:
 ```
 version: "3.9"
-
+name: jellyseerr-notifications
 services:
 
-  jellyseerr-sync:
-    image: dockerdaverick/jellyseerrsync
+  jellyseerr-notifications:
+    image: dockerdaverick/jellyseerrsync:latest
     environment:
+      # Refer to https://github.com/nreco/logging for logging configuration
+      - Logging:File:Path=JellyseerrSync.log 
+      - Logging:File:Append=true
+      - Logging:File:MinLevel=Information # min level for the file logger (Trace,Debug,Information,Warning,Error,Critical,None)
+      - Logging:File:FileSizeLimitBytes=0 # use to activate rolling file behaviour
+      - Logging:File:MaxRollingFiles=0 # use to specify max number of log files
       - JELLYSEERR_APIKEY=MYAPIKEY
       - JELLYFIN_APIKEY=MYAPIKEY
       - JELLYSEERR_HOST_URL=http://192.168.1.11:5055/
       - JELLYFIN_HOST_URL=http://192.168.1.10:8096/
     ports:
       - 50580:80
-    restart: unless-stopped
+    restart: unless-stopped   
 ```
 

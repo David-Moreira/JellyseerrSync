@@ -16,6 +16,8 @@ var JELLYFIN_APIKEY = configuration.GetSection( "JELLYFIN_APIKEY" ).Value;
 var JELLYSEERR_HOST_URL = configuration.GetSection( "JELLYSEERR_HOST_URL" ).Value;
 var JELLYFIN_HOST_URL = configuration.GetSection( "JELLYFIN_HOST_URL" ).Value;
 
+var LOG_FILE_PATH = configuration.GetSection( "Logging:File:Path" ).Value;
+
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYSEERR_APIKEY );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYSEERR_HOST_URL );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_HOST_URL );
@@ -24,7 +26,8 @@ ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_APIKEY );
 var JELLYSEERR_URI = new Uri( JELLYSEERR_HOST_URL );
 var JELLYFIN_URI = new Uri( JELLYFIN_HOST_URL );
 
-builder.Services.AddLogging( loggingBuilder => {
+builder.Services.AddLogging( loggingBuilder =>
+{
     var loggingSection = configuration.GetSection( "Logging" );
     loggingBuilder.AddFile( loggingSection );
 } );
@@ -55,7 +58,48 @@ Sync Endpoints:
 
 This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all the movies that are marked as Available in Jellyseerr.
 If a movie is not found in Jellyfin it will be cleared from Jellyseerr.
+
+Log Endpoints:
+/logs
+
+This endpoint will try to return the log file content if it exists.
 " ) );
+
+app.MapGet( "/logs", async ( HttpResponse response ) =>
+{
+    var log = "No log file found";
+
+    if ( !string.IsNullOrWhiteSpace( LOG_FILE_PATH ) )
+    {
+        try
+        {
+            StringBuilder sb = new StringBuilder();
+            using ( var logFile = new FileStream( LOG_FILE_PATH, FileMode.Open, FileAccess.Read, FileShare.ReadWrite ) )
+            using ( var sr = new StreamReader( logFile ) )
+            {
+                while ( !sr.EndOfStream )
+                {
+                    sb.AppendLine( sr.ReadLine() );
+                }
+            }
+            log = sb.ToString();
+        }
+        catch ( Exception ex)
+        {
+            log = $"Tried reading the file : {LOG_FILE_PATH}, but the following error occurred: {ex}";
+        }
+    }
+
+    response.StatusCode = 200;
+
+    response.ContentType = "text/plain";
+    response.ContentLength = null;
+    response.Headers.Add( "Content-Encoding", "identity" );
+    response.Headers.Add( "Transfer-Encoding", "identity" );
+
+    await response.WriteAsync( log );
+    await response.CompleteAsync();
+} );
 
 app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, [FromServices] ILogger<Program> logger, HttpResponse response ) =>
 {
