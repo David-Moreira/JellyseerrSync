@@ -21,15 +21,19 @@ ArgumentNullException.ThrowIfNullOrEmpty( JELLYSEERR_HOST_URL );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_HOST_URL );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_APIKEY );
 
+var JELLYSEERR_URI = new Uri( JELLYSEERR_HOST_URL );
+var JELLYFIN_URI = new Uri( JELLYFIN_HOST_URL );
+
+
 builder.Services.AddHttpClient( "Jellyseerr", ( client ) =>
 {
-    client.BaseAddress = new Uri( $"{JELLYSEERR_HOST_URL}api/v1/" );
+    client.BaseAddress = new Uri( JELLYSEERR_URI, "api/v1/" );
     client.DefaultRequestHeaders.Add( "X-Api-Key", JELLYSEERR_APIKEY );
 } );
 
 builder.Services.AddHttpClient( "Jellyfin", ( client ) =>
 {
-    client.BaseAddress = new Uri( JELLYFIN_HOST_URL );
+    client.BaseAddress = JELLYFIN_URI;
     client.DefaultRequestHeaders.Add( "Authorization", $"MediaBrowser Token=\"{JELLYFIN_APIKEY}\"" );
 } );
 
@@ -189,7 +193,7 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
         {
             foreach (var notFoundMovie in notFoundMovies)
             {
-                var clearMessage = $"Clearing: {JELLYSEERR_HOST_URL}movie/{notFoundMovie.TmdbId}";
+                var clearMessage = $"Clearing: {new Uri(JELLYSEERR_URI, $"movie/{notFoundMovie.TmdbId}")}";
                 log.AppendLine( clearMessage );
                 Console.WriteLine( clearMessage );
                 await jellyseerrClient.DeleteAsync( $"media/{notFoundMovie.MediaId}" );
