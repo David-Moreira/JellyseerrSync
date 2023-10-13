@@ -16,6 +16,8 @@ var JELLYFIN_APIKEY = configuration.GetSection( "JELLYFIN_APIKEY" ).Value;
 var JELLYSEERR_HOST_URL = configuration.GetSection( "JELLYSEERR_HOST_URL" ).Value;
 var JELLYFIN_HOST_URL = configuration.GetSection( "JELLYFIN_HOST_URL" ).Value;
 
+var LOG_FILE_PATH = configuration.GetSection( "Logging:File:Path" ).Value;
+
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYSEERR_APIKEY );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYSEERR_HOST_URL );
 ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_HOST_URL );
@@ -24,6 +26,11 @@ ArgumentNullException.ThrowIfNullOrEmpty( JELLYFIN_APIKEY );
 var JELLYSEERR_URI = new Uri( JELLYSEERR_HOST_URL );
 var JELLYFIN_URI = new Uri( JELLYFIN_HOST_URL );
 
+builder.Services.AddLogging( loggingBuilder =>
+{
+    var loggingSection = configuration.GetSection( "Logging" );
+    loggingBuilder.AddFile( loggingSection );
+} );
 
 builder.Services.AddHttpClient( "Jellyseerr", ( client ) =>
 {
@@ -40,21 +47,48 @@ builder.Services.AddHttpClient( "Jellyfin", ( client ) =>
 var app = builder.Build();
 
 app.MapGet( "/", async ( context ) => await context.Response.WriteAsync( @"
-Endpoints:
+Notification Endpoints:
 /radarr/notification
 /sonarr/notification
 
 It is of note that any series episode deletion assumes the entire series is deleted. As there seems to be no way to determine if there are episodes left.
 
+Sync Endpoints:
 /syncdeleted/movies
 
-This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all movies that are marked as Available in Jellyseerr.
+This endpoint will query Jellyseerr for all movies that are marked as Available and then query Jellyfin for all the movies that are marked as Available in Jellyseerr.
 If a movie is not found in Jellyfin it will be cleared from Jellyseerr.
+
+Log Endpoints:
+/logs
+
+This endpoint will try to return the log file content if it exists.
 " ) );
 
-app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, HttpResponse response ) =>
+app.MapGet( "/logs", async ( HttpResponse response ) =>
 {
-    var log = await SyncDeletedMovies( httpClientFactory );
+    var log = "No log file found";
+
+    if ( !string.IsNullOrWhiteSpace( LOG_FILE_PATH ) )
+    {
+        try
+        {
+            StringBuilder sb = new StringBuilder();
+            using ( var logFile = new FileStream( LOG_FILE_PATH, FileMode.Open, FileAccess.Read, FileShare.ReadWrite ) )
+            using ( var sr = new StreamReader( logFile ) )
+            {
+                while ( !sr.EndOfStream )
+                {
+                    sb.AppendLine( sr.ReadLine() );
+                }
+            }
+            log = sb.ToString();
+        }
+        catch ( Exception ex)
+        {
+            log = $"Tried reading the file : {LOG_FILE_PATH}, but the following error occurred: {ex}";
+        }
+    }
 
     response.StatusCode = 200;
 
@@ -67,82 +101,92 @@ app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory htt
     await response.CompleteAsync();
 } );
 
-app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] RadarrNotificationPayload payload )
-    => ProcessRadarrNotification( httpClientFactory, payload ) );
+app.MapGet( "/syncdeleted/movies", async ( [FromServices] IHttpClientFactory httpClientFactory, [FromServices] ILogger<Program> logger, HttpResponse response ) =>
+{
+    var log = await SyncDeletedMovies( httpClientFactory, logger );
 
-app.MapPost( "/sonarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromBody] SonarrNotificationPayload payload )
-    => ProcessSonarrNotification( httpClientFactory, payload ) );
+    response.StatusCode = 200;
+
+    response.ContentType = "text/plain";
+    response.ContentLength = null;
+    response.Headers.Add( "Content-Encoding", "identity" );
+    response.Headers.Add( "Transfer-Encoding", "identity" );
+
+    await response.WriteAsync( log );
+    await response.CompleteAsync();
+} );
+
+app.MapPost( "/radarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromServices] ILogger<Program> logger, [FromBody] RadarrNotificationPayload payload )
+    => ProcessRadarrNotification( httpClientFactory, logger, payload ) );
+
+app.MapPost( "/sonarr/notification", ( [FromServices] IHttpClientFactory httpClientFactory, [FromServices] ILogger<Program> logger, [FromBody] SonarrNotificationPayload payload )
+    => ProcessSonarrNotification( httpClientFactory, logger, payload ) );
 
 app.Run();
 
 
-async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactory, RadarrNotificationPayload payload )
+async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactory, ILogger logger, RadarrNotificationPayload payload )
 {
-    Console.WriteLine( "Processing Radarr Notification" );
-    Console.WriteLine( System.Text.Json.JsonSerializer.Serialize( payload ) );
+    logger.LogInformation( "Processing Radarr Notification" );
+    logger.LogInformation( "Received the following Notification: {Notification}", System.Text.Json.JsonSerializer.Serialize( payload ) );
 
-    if (payload.EventType.Equals( "MovieFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ))
+    try
     {
-        Console.WriteLine( "Processing MovieFileDelete" );
-        var client = httpClientFactory.CreateClient( "Jellyseerr" );
-        var movie = await client.GetFromJsonAsync<JellySeerrMovie>( $"movie/{payload.Movie.TmdbId}" );
-        await client.DeleteAsync( $"media/{movie.MediaInfo.Id}" );
-    };
-}
-
-async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, SonarrNotificationPayload payload )
-{
-    Console.WriteLine( "Processing Sonarr Notification" );
-    Console.WriteLine( System.Text.Json.JsonSerializer.Serialize( payload ) );
-
-    if (payload.EventType.Equals( "SeriesDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ))
-    {
-        Console.WriteLine( "Processing SeriesDelete" );
-        var client = httpClientFactory.CreateClient( "Jellyseerr" );
-
-        Console.WriteLine( $"Searching for... {payload.Series.Title}" );
-        var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
-
-        if (searchResult is not null && searchResult.Results?.Count > 0)
+        if ( payload.EventType.Equals( "MovieFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
         {
-            var foundMedia = searchResult.Results.FirstOrDefault( x => x.MediaInfo?.TvdbId == payload.Series.TvdbId );
-            if (foundMedia is not null)
-            {
-                Console.WriteLine( $"Found existing media for {foundMedia.MediaInfo.TmdbId}" );
-                await client.DeleteAsync( $"media/{foundMedia.MediaInfo.Id}" );
-            }
+            logger.LogInformation( "Processing MovieFileDelete" );
 
+            await RunMovieClear( httpClientFactory, logger, payload );
         }
-    };
-
-    if (payload.EventType.Equals( "EpisodeFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ))
-    {
-        Console.WriteLine( "Processing EpisodeFileDelete" );
-
-        var client = httpClientFactory.CreateClient( "Jellyseerr" );
-
-        Console.WriteLine( $"Searching for... {payload.Series.Title}" );
-        var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
-
-        if (searchResult is not null && searchResult.Results?.Count > 0)
+        else
         {
-            var foundMedia = searchResult.Results.FirstOrDefault( x => x.MediaInfo?.TvdbId == payload.Series.TvdbId );
-            if (foundMedia is not null)
-            {
-                Console.WriteLine( $"Found existing media for {foundMedia.MediaInfo.TmdbId}" );
-                await client.DeleteAsync( $"media/{foundMedia.MediaInfo.Id}" );
-            }
-
+            logger.LogInformation( "Nothing to Process" );
         }
 
-    };
+    }
+    catch ( Exception ex )
+    {
+        logger.LogError( "An error has occurred: {Exception}", ex );
+    }
 }
 
-async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
+async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, ILogger logger, SonarrNotificationPayload payload )
+{
+    logger.LogInformation( "Processing Sonarr Notification" );
+    logger.LogInformation( "Received the following Notification: {Notification}", System.Text.Json.JsonSerializer.Serialize( payload ) );
+
+    try
+    {
+        if ( payload.EventType.Equals( "SeriesDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
+        {
+            logger.LogInformation( "Processing SeriesDelete" );
+
+            await RunEpisodeClear( httpClientFactory, logger, payload );
+        }
+        else if ( payload.EventType.Equals( "EpisodeFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
+        {
+            logger.LogInformation( "Processing EpisodeFileDelete" );
+
+            await RunEpisodeClear( httpClientFactory, logger, payload );
+        }
+        else
+        {
+            logger.LogInformation( "Nothing to Process" );
+        }
+    }
+    catch ( Exception ex )
+    {
+        logger.LogError( "An error has occurred: {Exception}", ex );
+    }
+};
+
+
+
+async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory, ILogger logger )
 {
     var batchSize = 100;
 
-    Console.WriteLine( "Processing Deleted Movies Sync..." );
+    logger.LogInformation( "Processing Deleted Movies Sync..." );
     var log = new StringBuilder();
 
     try
@@ -152,6 +196,10 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
 
         var jellyfinClient = httpClientFactory.CreateClient( "Jellyfin" );
         var jellyseerrClient = httpClientFactory.CreateClient( "Jellyseerr" );
+
+        var searchMessage = "Searching JellySeerr media...";
+        log.AppendLine( searchMessage );
+        logger.LogInformation( searchMessage );
 
         var searchResult = await jellyseerrClient.GetFromJsonAsync<JellyseerrMediaSearchResult>( $"media?take=999&skip=0&filter=available&sort=added" );
         var availableMovies = searchResult.Results.Where( x => x.MediaType.Equals( "movie", StringComparison.InvariantCultureIgnoreCase ) );
@@ -172,10 +220,10 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
         var jellyseerrMoviesCount = moviesIds.Count();
         var totalMessage = $"Total Jellyseerr Movies found as Available: {jellyseerrMoviesCount}";
         log.AppendLine( totalMessage );
-        Console.WriteLine( totalMessage );
+        logger.LogInformation( totalMessage );
 
         var existingJellyfinItems = new List<JellyfinItem>();
-        for (int i = 0; i < jellyseerrMoviesCount; i += batchSize)
+        for ( int i = 0; i < jellyseerrMoviesCount; i += batchSize )
         {
             var batch = moviesIds.Skip( i ).Take( batchSize );
             var jellySearchResult = await jellyfinClient.GetFromJsonAsync<JellyfinSearchResult>( $"Items?ids={string.Join( ",", batch.Select( x => x.Id ) )}&enableTotalRecordCount=false&enableImages=false" );
@@ -185,25 +233,67 @@ async Task<string> SyncDeletedMovies( IHttpClientFactory httpClientFactory )
 
         var notFoundMovies = moviesIds.Where( x => !existingJellyfinItems.Any( y => Guid.Parse( y.Id ) == Guid.Parse( x.Id ) ) );
 
-        var notFoundMessage = "Jellyfin movies/items that do not exist: " + notFoundMovies.Count();
+        var notFoundMessage = "Jellyfin movies/items that were not found: " + notFoundMovies.Count();
         log.AppendLine( notFoundMessage );
-        Console.WriteLine( notFoundMessage );
+        logger.LogInformation( notFoundMessage );
 
-        if (notFoundMovies.Any())
+        if ( notFoundMovies.Any() )
         {
-            foreach (var notFoundMovie in notFoundMovies)
+            foreach ( var notFoundMovie in notFoundMovies )
             {
-                var clearMessage = $"Clearing: {new Uri(JELLYSEERR_URI, $"movie/{notFoundMovie.TmdbId}")}";
+                var clearMessage = $"Clearing: {new Uri( JELLYSEERR_URI, $"movie/{notFoundMovie.TmdbId}" )}";
                 log.AppendLine( clearMessage );
-                Console.WriteLine( clearMessage );
+                logger.LogInformation( clearMessage );
                 await jellyseerrClient.DeleteAsync( $"media/{notFoundMovie.MediaId}" );
             }
         }
     }
-    catch (Exception ex)
+    catch ( Exception ex )
     {
         log.AppendLine( "An error has occurred: " );
         log.AppendLine( ex.ToString() );
     }
     return log.ToString();
+}
+
+static async Task RunMovieClear( IHttpClientFactory httpClientFactory, ILogger logger, RadarrNotificationPayload payload )
+{
+    var client = httpClientFactory.CreateClient( "Jellyseerr" );
+    var response = await client.GetAsync( $"movie/{payload.Movie.TmdbId}" );
+
+    if ( !response.IsSuccessStatusCode )
+    {
+        logger.LogWarning( "No entry was cleared. Could not find an entry for this movie." );
+        return;
+    }
+
+    var movie = await response.Content.ReadFromJsonAsync<JellySeerrMovie>();
+    logger.LogInformation( "Clearing entry... with TmdbId: {TmdbId} | JellySeerr MediaId: {JellySeerrMediaId}", movie.MediaInfo.TmdbId, movie.MediaInfo.Id );
+    await client.DeleteAsync( $"media/{movie.MediaInfo.Id}" );
+}
+
+static async Task RunEpisodeClear( IHttpClientFactory httpClientFactory, ILogger logger, SonarrNotificationPayload payload )
+{
+    var client = httpClientFactory.CreateClient( "Jellyseerr" );
+
+    logger.LogInformation( "Searching Jellyseerr for... {Title}", payload.Series.Title );
+    var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
+
+    if ( searchResult is not null && searchResult.Results?.Count > 0 )
+    {
+        var foundMedia = searchResult.Results.FirstOrDefault( x => x.MediaInfo?.TvdbId == payload.Series.TvdbId );
+        if ( foundMedia is not null )
+        {
+            logger.LogInformation( "Clearing entry... with TmdbId: {TmdbId} | JellySeerr MediaId: {JellySeerrMediaId}", foundMedia.MediaInfo.TmdbId, foundMedia.MediaInfo.Id );
+            await client.DeleteAsync( $"media/{foundMedia.MediaInfo.Id}" );
+        }
+        else
+        {
+            logger.LogWarning( "No entry was cleared. Could not find an entry for this series." );
+        }
+    }
+    else
+    {
+        logger.LogWarning( "Could not find this series: {Title}", payload.Series.Title );
+    }
 }

@@ -1,0 +1,29 @@
+﻿@JellyseerrSync_HostAddress = http://localhost:5258
+
+GET {{JellyseerrSync_HostAddress}}/syncdeleted/movies
+
+###
+
+POST {{JellyseerrSync_HostAddress}}/radarr/notification
+Content-Type: application/json
+
+{
+  "instanceName": "test",
+  "eventType": "MovieFileDelete",
+  "DeleteReason": "",
+  "movie": {"TmdbId" : 1},
+  "movieFile": {} 
+}
+###
+
+POST {{JellyseerrSync_HostAddress}}/sonarr/notification
+Content-Type: application/json
+
+{
+  "instanceName": "test",
+  "eventType": "SeriesDelete",
+  "DeleteReason": "",
+  "series": {"Title": "Test"}
+}
+###
+
