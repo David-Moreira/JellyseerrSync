@@ -84,7 +84,7 @@ app.MapGet( "/logs", async ( HttpResponse response ) =>
             }
             log = sb.ToString();
         }
-        catch ( Exception ex)
+        catch ( Exception ex )
         {
             log = $"Tried reading the file : {LOG_FILE_PATH}, but the following error occurred: {ex}";
         }
@@ -132,7 +132,7 @@ async Task ProcessRadarrNotification( IHttpClientFactory httpClientFactory, ILog
 
     try
     {
-        if ( payload.EventType.Equals( "MovieFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
+        if ( payload.EventType.Equals( "MovieFileDelete", StringComparison.InvariantCultureIgnoreCase ) && ( payload.DeleteReason is null || !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) ) )
         {
             logger.LogInformation( "Processing MovieFileDelete" );
 
@@ -157,13 +157,13 @@ async Task ProcessSonarrNotification( IHttpClientFactory httpClientFactory, ILog
 
     try
     {
-        if ( payload.EventType.Equals( "SeriesDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
+        if ( payload.EventType.Equals( "SeriesDelete", StringComparison.InvariantCultureIgnoreCase ) && ( payload.DeleteReason is null || !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) ) )
         {
             logger.LogInformation( "Processing SeriesDelete" );
 
             await RunEpisodeClear( httpClientFactory, logger, payload );
         }
-        else if ( payload.EventType.Equals( "EpisodeFileDelete", StringComparison.InvariantCultureIgnoreCase ) && !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) )
+        else if ( payload.EventType.Equals( "EpisodeFileDelete", StringComparison.InvariantCultureIgnoreCase ) && ( payload.DeleteReason is null || !payload.DeleteReason.Equals( "upgrade", StringComparison.InvariantCultureIgnoreCase ) ) )
         {
             logger.LogInformation( "Processing EpisodeFileDelete" );
 
@@ -277,7 +277,8 @@ static async Task RunEpisodeClear( IHttpClientFactory httpClientFactory, ILogger
     var client = httpClientFactory.CreateClient( "Jellyseerr" );
 
     logger.LogInformation( "Searching Jellyseerr for... {Title}", payload.Series.Title );
-    var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={payload.Series.Title}&page=1&language=en" );
+
+    var searchResult = await client.GetFromJsonAsync<JellyseerrSearchResult>( $"search?query={Uri.EscapeDataString( payload.Series.Title )}&page=1&language=en" );
 
     if ( searchResult is not null && searchResult.Results?.Count > 0 )
     {
