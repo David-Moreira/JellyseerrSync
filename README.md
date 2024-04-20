@@ -1,5 +1,11 @@
 # JellyseerrSync
 
+## Archived
+
+With the release of jellyseer v1.8.0 https://github.com/Fallenbagel/jellyseerr/releases/tag/v1.8.0 a feature was implemented to properly remove media automatically on scan : Fallenbagel/jellyseerr#522
+This means that this repository / application should no longer be needed from jellyseerr v1.8.0+.
+This repository will no longer have updates and it is archived. All the docker images will still be available for usage.
+
 ## The Problem
 If media gets deleted from jellyfin, jellyseerr does not get updated and so media still shows as Available. See https://github.com/Fallenbagel/jellyseerr/issues/84
 
